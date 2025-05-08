@@ -1,10 +1,24 @@
 class Sudoku:
     grid: list[int | None]=[]
-    options: list[set[int]] = []
+    candidates: list[list[int]] = []
 
-    def __init__(self, grid):
+    def __init__(
+        self, 
+        grid: list[int | None],
+        candidates: list[list[int]] = None
+    ):
         self.grid = [value for value in grid]
-        self.options = [set(range(1, 10)) for _ in grid]
+        
+        if candidates:
+             self.candidates =  [
+                cell_candidates.copy() for cell_candidates in candidates
+            ]
+        else:
+            for index in range(0, len(self.grid)):
+                if self.grid[index] is None:
+                    self.candidates.append(list(range(1, 10)))
+                else:
+                    self.candidates.append([self.grid[index]])
 
     # https://en.wikipedia.org/wiki/Depth-first_search
     def solve(self) -> 'Sudoku':
@@ -19,15 +33,15 @@ class Sudoku:
             if not current:
                 continue
 
-            print(f'Current\n{str(current)}')
-
-            if current.is_solved():
-                solutions.append(current)
-
             if not current in visited:
                 visited.add(current)
-                for next_option in current.expand_options():
-                    stack.append(next_option)
+
+                if current.is_solved():
+                    solutions.append(current)
+                    return solutions
+                else:
+                    for next_option in current.expand_options():
+                        stack.append(next_option)
 
         return solutions
 
@@ -36,10 +50,14 @@ class Sudoku:
         
         for x in range(0, 9):
             for y in range(0, 9):
+                if self.at(x, y) is not None:
+                    continue
+
                 index = self.coordinate_to_index(x, y)        
-                for cell_option in self.options_at(x, y):
-                    option = Sudoku(self.grid)
-                    option.grid[index] = cell_option
+                for candidate in self.candidates[self.coordinate_to_index(x, y)]:
+                    option = Sudoku(self.grid, self.candidates)
+                    option.grid[index] = candidate
+                    option.candidates[index] = [candidate]
                     options.append(option)
 
         return options
@@ -57,53 +75,51 @@ class Sudoku:
                     if self.at(x, y) is not None:
                         continue
 
-                    to_remove = [
-                        value for value in self.options[index] \
-                            if value not in self.options_at(x, y) 
+                    self.candidates[index] = [
+                        value for value in self.candidates_at(x, y)
                     ]
-                    for value in to_remove:
-                        self.options[index].remove(value)
 
                     # No valid option for cell, solution invalidated
-                    if len(self.options[index]) == 0:
+                    if len(self.candidates[index]) == 0:
                         return None
                     # Only one possible option, place value
-                    elif len(self.options[index]) == 1:    
-                        value = list(self.options[index])[0]  
+                    elif len(self.candidates[index]) == 1:    
+                        value = self.candidates[index][0]  
                         self.grid[index] = value
-                        self.options[index] = set()
+                        self.candidates[index] = [value]
                         continue_reducing = True
 
-                    # Scan rows, columns, and subgrids for options that
-                    # only appear once
-                    for value in self.options_at(x, y):      
-                        print(f'{x},{y}')
-                        print(value)
-                        print( [
-                                v for v in self.options_in_subgrid(x, y) if value in v
-                            ])
-                        in_column = len(
-                            [
-                                v for v in self.options_in_column(x) if value in v
-                            ]
-                        )
-                        in_row = len(
-                            [
-                                v for v in self.options_in_row(y) if value in v
-                            ]
-                        )
-                        in_subgrid = len(
-                            [
-                                 v for v in self.options_in_subgrid(x, y) if value in v
-                            ]
-                        )
+                    # Scan rows, columns, and subgrids for candidates that 
+                    # are not a candidate anywhere else
+                    row_indices = self.row_indices(y)
+                    column_indices = self.column_indices(x)
+                    subgrid_indices = self.subgrid_indices(x, y)
 
-                        print(f'in_subgrid {str(in_subgrid)}')
-                        if 2 in [in_column, in_row, in_subgrid]:
+                    row_indices.remove(index)
+                    column_indices.remove(index)
+                    subgrid_indices.remove(index)
+
+                    row_candidates = set(merge_lists([
+                        self.candidates[index] for index in row_indices
+                    ]))
+
+                    column_candidates = set(merge_lists([
+                        self.candidates[index] for index in column_indices
+                    ]))
+
+                    subgrid_candidates = set(merge_lists([
+                        self.candidates[index] for index in subgrid_indices
+                    ]))
+
+                    for value in range(1, 10):
+                        only_candidate = (value not in row_candidates) \
+                            or (value not in column_candidates) \
+                            or (value not in subgrid_candidates)
+                        
+                        if only_candidate:
                             self.grid[index] = value
-                            self.options[index] = set()
+                            self.candidates[index] = [value]
                             continue_reducing = True
-                            print(self)
 
         return self
                     
@@ -117,22 +133,22 @@ class Sudoku:
         else:
             return self.grid[index]
         
-    def options_at(self, x: int, y: int) -> list[int]:
-        options = set(range(1, 10))
+    def candidates_at(self, x: int, y: int) -> list[int]:
+        if self.at(x, y) is not None:
+            return [self.at(x, y)]
+
+        options = list(range(1, 10))
 
         # Eliminations
-        invalid_options = self.in_row(y)
-        invalid_options.update(self.in_column(x))
-        invalid_options.update(self.in_subgrid(x, y))
+        invalid_options = list(
+            set(self.in_row(y) + self.in_column(x) + self.in_subgrid(x, y))
+        )
 
         for value in invalid_options:
             options.remove(value)
 
-        # Only options
-        for values in range(1, 10):
-            pass
-
         return options
+    
      
     def coordinate_to_index(self, x: int, y: int):
         return (y * 9) + x
@@ -140,59 +156,37 @@ class Sudoku:
     def index_to_coordinate(self, index: int) -> tuple[int, int]:
         return (index // 9, index % 9)
         
-    def in_row(self, y: int) -> set[int]:
-        return set(value for value in self.row(y) if value)
+    def in_row(self, y: int) -> list[int]:
+        return [value for value in self.row(y) if value]
 
-    def in_column(self, x: int) -> set[int]:
-        return set(value for value in self.column(x) if value)
+    def in_column(self, x: int) -> list[int]:
+        return [value for value in self.column(x) if value]
 
-    def in_subgrid(self, x: int, y: int) -> set[int]:
-        return set(value for value in self.subgrid(x, y) if value)
+    def in_subgrid(self, x: int, y: int) -> list[int]:
+        return [value for value in self.subgrid(x, y) if value]
     
-    def options_in_row(self, y: int) -> list[set[int]]:
-        indices = range(y * 9, y * 9 + 9)
-        options = []
-        for i in indices:
-            ox, oy = self.index_to_coordinate(i)
-            options.append(self.options_at(ox, oy))
-        return options
+    def row_indices(self, y: int) -> list[int]:
+        return list(range(y * 9, (y * 9) + 9))
     
-    def options_in_column(self, x: int) -> list[set[int]]:
-        indices = range(x, len(self.grid), 9)
-        options = []
-        for i in indices:
-            ox, oy = self.index_to_coordinate(i)
-            options.append(self.options_at(ox, oy))
-        return options
+    def column_indices(self, x: int) -> list[int]:
+        return list(range(x, len(self.grid), 9))
     
-    def options_in_subgrid(self, x: int, y: int) -> list[set[int]]:
+    def subgrid_indices(self, x: int, y: int) -> list[int]:
         start_x, start_y = 3 * (x // 3), 3 * (y // 3)
         end_x, end_y = start_x + 3, start_y + 3     
-        indices = [
+        return [
             self.coordinate_to_index(x, y) for x in range(start_x, end_x) \
                 for y in range(start_y, end_y)
         ]
     
-        options = []
-        for i in indices:
-            ox, oy = self.index_to_coordinate(i)
-            options.append(self.options_at(ox, oy))
-        return options
-    
-
     def row(self, y: int) -> list[int]:
         return self.grid[y * 9 : (y * 9) + 9]
 
     def column(self, x: int) -> list[int]:
-        return [self.grid[i] for i in range(x, len(self.grid), 9)]
+        return [self.grid[index] for index in self.column_indices(x)]
 
     def subgrid(self, x: int, y: int) -> list[int]:
-        start_x, start_y = 3 * (x // 3), 3 * (y // 3)
-        end_x, end_y = start_x + 3, start_y + 3     
-        return [
-            self.at(x, y) for x in range(start_x, end_x) \
-                for y in range(start_y, end_y)
-        ]
+        return [self.grid[index] for index in self.subgrid_indices(x, y)]
     
     def matrix(self) -> list[list[int | None]]:
         return [
@@ -225,6 +219,16 @@ def read_puzzle() -> Sudoku:
                     grid.append(int(value))
 
     return grid
+
+
+
+def merge_lists(lists):
+    result = []
+    for list in lists:
+        for value in list:
+            result.append(value)
+
+    return result
 
 
 if __name__ == "__main__":
