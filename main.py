@@ -14,7 +14,7 @@ class Sudoku:
                 cell_candidates.copy() for cell_candidates in candidates
             ]
         else:
-            for index in range(0, len(self.grid)):
+            for index in range(len(self.grid)):
                 if self.grid[index] is None:
                     self.candidates.append(list(range(1, 10)))
                 else:
@@ -193,7 +193,20 @@ class Sudoku:
             self.grid[row_start : row_start + 9] \
                 for row_start in range(0, len(self.grid), 9)
         ]
+    
+    def __eq__(self, other):
+        if len(self.grid) != len(other.grid):
+            return False
         
+        for index in range(len(self.grid)):
+            if self.grid[index] != other.grid[index]:
+                return False
+            
+        return True
+    
+    def __hash__(self):
+        return hash(str(self))
+
     def __repr__(self) -> str:
         return '\n'.join(
             ' '.join('.' if value is None else str(value) for value in row) \
