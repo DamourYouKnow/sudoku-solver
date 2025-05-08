@@ -61,7 +61,6 @@ class Sudoku:
                         value for value in self.options[index] \
                             if value not in self.options_at(x, y) 
                     ]
-
                     for value in to_remove:
                         self.options[index].remove(value)
 
@@ -69,13 +68,42 @@ class Sudoku:
                     if len(self.options[index]) == 0:
                         return None
                     # Only one possible option, place value
-                    elif len(self.options[index]) == 1:          
-                        self.grid[index] = list(self.options[index])[0]
+                    elif len(self.options[index]) == 1:    
+                        value = list(self.options[index])[0]  
+                        self.grid[index] = value
                         self.options[index] = set()
                         continue_reducing = True
 
                     # Scan rows, columns, and subgrids for options that
                     # only appear once
+                    for value in self.options_at(x, y):      
+                        print(f'{x},{y}')
+                        print(value)
+                        print( [
+                                v for v in self.options_in_subgrid(x, y) if value in v
+                            ])
+                        in_column = len(
+                            [
+                                v for v in self.options_in_column(x) if value in v
+                            ]
+                        )
+                        in_row = len(
+                            [
+                                v for v in self.options_in_row(y) if value in v
+                            ]
+                        )
+                        in_subgrid = len(
+                            [
+                                 v for v in self.options_in_subgrid(x, y) if value in v
+                            ]
+                        )
+
+                        print(f'in_subgrid {str(in_subgrid)}')
+                        if 2 in [in_column, in_row, in_subgrid]:
+                            self.grid[index] = value
+                            self.options[index] = set()
+                            continue_reducing = True
+                            print(self)
 
         return self
                     
@@ -108,6 +136,9 @@ class Sudoku:
      
     def coordinate_to_index(self, x: int, y: int):
         return (y * 9) + x
+    
+    def index_to_coordinate(self, index: int) -> tuple[int, int]:
+        return (index // 9, index % 9)
         
     def in_row(self, y: int) -> set[int]:
         return set(value for value in self.row(y) if value)
@@ -117,6 +148,37 @@ class Sudoku:
 
     def in_subgrid(self, x: int, y: int) -> set[int]:
         return set(value for value in self.subgrid(x, y) if value)
+    
+    def options_in_row(self, y: int) -> list[set[int]]:
+        indices = range(y * 9, y * 9 + 9)
+        options = []
+        for i in indices:
+            ox, oy = self.index_to_coordinate(i)
+            options.append(self.options_at(ox, oy))
+        return options
+    
+    def options_in_column(self, x: int) -> list[set[int]]:
+        indices = range(x, len(self.grid), 9)
+        options = []
+        for i in indices:
+            ox, oy = self.index_to_coordinate(i)
+            options.append(self.options_at(ox, oy))
+        return options
+    
+    def options_in_subgrid(self, x: int, y: int) -> list[set[int]]:
+        start_x, start_y = 3 * (x // 3), 3 * (y // 3)
+        end_x, end_y = start_x + 3, start_y + 3     
+        indices = [
+            self.coordinate_to_index(x, y) for x in range(start_x, end_x) \
+                for y in range(start_y, end_y)
+        ]
+    
+        options = []
+        for i in indices:
+            ox, oy = self.index_to_coordinate(i)
+            options.append(self.options_at(ox, oy))
+        return options
+    
 
     def row(self, y: int) -> list[int]:
         return self.grid[y * 9 : (y * 9) + 9]
@@ -152,7 +214,7 @@ class Sudoku:
 def read_puzzle() -> Sudoku:
     grid = []
 
-    with open('puzzle.txt', 'r') as file:
+    with open('puzzle-hard.txt', 'r') as file:
         lines = file.readlines()
     
         for line in lines:
